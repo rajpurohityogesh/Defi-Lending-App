@@ -37,8 +37,9 @@ const Navbar = (props) => {
       </a>
 
       <div style={{display:"flex", alignItems:"center"}}>
-        <div ><Link to="/" className={classes.pageLinks} >Lend</Link></div>
-        <div ><Link to="/" className={classes.pageLinks} >Borrow</Link></div>
+        <div ><Link to="/" className={classes.pageLinks} >Home</Link></div>
+        <div ><Link to="/lend" className={classes.pageLinks} >Lend</Link></div>
+        <div ><Link to="/borrow" className={classes.pageLinks} >Borrow</Link></div>
         <ul className="navbar-nav px-3">
           <li className="nav-item text-nowrap d-none d-sm-none d-sm-block">
             <small className="text-secondary">

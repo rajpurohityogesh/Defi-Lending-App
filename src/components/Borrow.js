@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import Alert from "sweetalert2";
+import Swal from "sweetalert2";
 import { makeStyles } from '@material-ui/core/styles';
 import {FormControl, Select, MenuItem, Backdrop, CircularProgress } from "@material-ui/core";
+import { borrowTokens, dappRequireToBorrowFunc, repayBorrowTokens, tokenRequireToRepayFunc } from "./BlockChainFuncs";
 
 const useStyles = makeStyles((theme) => ({
   formControl: {
@@ -27,7 +29,7 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-const Main = ({state, manageState, stakeTokens, unstakeTokens}) => {  
+const Borrow = ({state, manageState, stakeTokens, unstakeTokens}) => {  
   const [input, setInput] = useState("");
   const classes = useStyles();
   const digitRgx = /^\d+$/;
@@ -37,24 +39,32 @@ const Main = ({state, manageState, stakeTokens, unstakeTokens}) => {
       <table className="table table-borderless text-muted text-center">
         <thead>
           <tr>
-            <th scope="col">Lending Balance</th>
+            <th scope="col">Market Fund</th>
+            <th scope="col">Borrowed Amount</th>
             <th scope="col">DAPP Balance</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>
-              {window.web3.utils.fromWei(
-                state.stakingBalance[state.selectedToken]
-                ? state.stakingBalance[state.selectedToken]
-                : "0", "Ether")}{" "}
+              {parseFloat(window.web3.utils.fromWei(
+                state.marketFund[state.selectedToken]
+                ? state.marketFund[state.selectedToken]
+                : "0", "Ether")).toFixed(2)}{" "}
               {state.selectedToken}
             </td>
             <td>
               {window.web3.utils.fromWei(
+                state.borrowBalance[state.selectedToken]
+                ? state.borrowBalance[state.selectedToken]
+                : "0", "Ether")}{" "}
+              {state.selectedToken}
+            </td>
+            <td>
+              {parseFloat(window.web3.utils.fromWei(
                 state.dappTokenBalance,
                 "Ether"
-              )}{" "}
+              )).toFixed(2)}{" "}
               DAPP
             </td>
           </tr>
@@ -64,27 +74,43 @@ const Main = ({state, manageState, stakeTokens, unstakeTokens}) => {
       <div className="card mb-4" >
           <div className="card-body">
               <form className="mb-3" onSubmit={async (event) => {
-                  event.preventDefault()
+                  event.preventDefault();
                   let amount = input;
                   amount = window.web3.utils.toWei(amount, 'Ether');
                   if(parseInt(amount) === 0){
                     Alert.fire("Error!", "Please Enter Non-Zero Value.", "error");
-                  } else if(parseInt(state.mTokensBalance[state.selectedToken]) < parseInt(amount)){
-                    Alert.fire("Error!", "You don't have "+input +" "+state.selectedToken+" to Lend.", "error");
+                  } else if(state.marketFund[state.selectedToken] < parseInt(amount)){
+                    Alert.fire("Error!", "Market doesn't have "+ input + " " +state.selectedToken+" to lend.", "error");
                   } else {
-                    await stakeTokens(state, manageState, amount, state.selectedToken)
-                    Alert.fire("Congrats!", "You have successfully lended "+
-                                    window.web3.utils.fromWei(amount, 'Ether')+" "+state.selectedToken+" to Us.", "success");
-                    setInput("");
+                    let dappRequireToBorrow = await dappRequireToBorrowFunc(state, amount, state.selectedToken);
+                    Swal.fire({
+                      title: 'You have to pay '+parseFloat(window.web3.utils.fromWei(""+dappRequireToBorrow)).toFixed(2)+' Dapp. Do you want to borrow?',
+                      showCancelButton: true,
+                      confirmButtonText: 'Yes'
+                    }).then((result) => {
+                      if (result.isConfirmed) {
+                        borrowTokens(state, manageState, amount, state.selectedToken)
+                          .then(res => {
+                            if(res.success){
+                              Alert.fire("Congrats!", "You have Borrowed "+input +" "+state.selectedToken+" at "+ 
+                                          parseFloat(window.web3.utils.fromWei(""+res.dappRequireToBorrow)).toFixed(2) +" dApp collateral.", "success");
+                              setInput("");
+                            } else {
+                              Alert.fire("Error!", "You don't have "+ parseFloat(window.web3.utils.fromWei(""+res.dappRequireToBorrow)).toFixed(2) 
+                                    +" DAPP token to borrow "+ input +" "+state.selectedToken+" .", "error");
+                            }
+                          });
+                      }
+                    });
                   }
               }}>
                   <div>
-                      <label className="float-left"><b>Lend Tokens</b></label>
+                      <label className="float-left"><b>Borrow Tokens</b></label>
                       <span className="float-right text-muted">
-                          Balance: {window.web3.utils.fromWei(
+                          Balance: {parseFloat(window.web3.utils.fromWei(
                             state.mTokensBalance[state.selectedToken] 
                             ? state.mTokensBalance[state.selectedToken]
-                            : "0", 'Ether')}
+                            : "0", 'Ether')).toFixed(2)}
                       </span>
                   </div>
                   <div className="input-group mb-4">
@@ -102,14 +128,6 @@ const Main = ({state, manageState, stakeTokens, unstakeTokens}) => {
                           onChange={(e) => setInput(e.target.value)}
                       />
                       <div className={classes.tokenInput}>
-                          {/* <img 
-                            src={require("../"+(state.selectedToken 
-                                    ? state.selectedToken
-                                    : "mDAI")+".png")} 
-                            width='32' 
-                            height='32' 
-                            alt=""
-                          /> */}
                           <FormControl className={classes.formControl}>
                             <Select
                               value={state.selectedToken}
@@ -139,36 +157,44 @@ const Main = ({state, manageState, stakeTokens, unstakeTokens}) => {
                           </FormControl>
                       </div>
                   </div>
-                  <button type="submit" className="btn btn-primary btn-block btn-lg">LEND!</button>
+                  <button type="submit" className="btn btn-primary btn-block btn-lg">BORROW!</button>
               </form>
-              <button
-                type="submit"
-                className="btn btn-link btn-block btn-sm"
-                onClick={async (event) => {
-                    event.preventDefault();
-                    let amount = window.web3.utils.toWei((!!input? input: "0"), 'Ether');
-                    if(parseInt(amount) === 0){
-                      Alert.fire("Error!", "Please Enter Non-Zero Value.", "error");
-                    } else if(parseInt(state.stakingBalance[state.selectedToken]) < parseInt(amount)){
-                      Alert.fire("Error!", "You don't have "+input +" "+state.selectedToken+" in lending.", "error");
-                    } else {
-                      unstakeTokens(state, manageState, amount, state.selectedToken)
-                      .then(res => {
-                        if(res.success){
-                          Alert.fire("Congrats!", "You have retrieved your lended "+input +" "+state.selectedToken+" back.", "success");
-                          setInput("");
-                        } else {
-                          Alert.fire("Error!", "You don't have "+ window.web3.utils.fromWei(res.dappRequireToUnstake) 
-                                +" DAPP token to retrieve your "+ input +" "+state.selectedToken+" .", "error");
-                        }
-                      });
-                    }
-                }}
-              >
-                  RETRIEVE...
-              </button>
           </div>
       </div>
+      <button
+        type="submit"
+        className="btn btn-primary btn-md"
+        style={{display:"block", width:"fit-content",margin:"0 auto", padding:"0.5rem 3rem"}}
+        onClick={async (event) => {
+            event.preventDefault();
+            let borrow = state.borrowBalance[state.selectedToken];
+            if(parseInt(borrow) === 0){
+              Alert.fire("Error!", "You haven't borrowed any of "+state.selectedToken+" token yet.", "error");
+            } else {
+              let tokenRequireToRepay = await tokenRequireToRepayFunc(state, state.selectedToken);
+              Swal.fire({
+                title: 'You have to pay '+parseFloat(window.web3.utils.fromWei(""+tokenRequireToRepay)).toFixed(2)+' '+state.selectedToken
+                        +'. Do you want to repay?',
+                showCancelButton: true,
+                confirmButtonText: 'Yes'
+              }).then((result) => {
+                if (result.isConfirmed) {
+                  repayBorrowTokens(state, manageState, state.selectedToken)
+                  .then(res => {
+                    if(res.success){
+                      Alert.fire("Congrats!", "You have repayed your "+parseFloat(window.web3.utils.fromWei(borrow, 'Ether')).toFixed(2)+" "+state.selectedToken+" loan to us.", "success");
+                      setInput("");
+                    } else {
+                      Alert.fire("Error!", "You don't have sufficient "+state.selectedToken+" to repay us .", "error");
+                    }
+                  });
+                }
+              });
+            }
+        }}
+      >
+          REPAY...
+      </button>
       <Backdrop className={classes.backdrop} open={state.loading}>
         <CircularProgress color="inherit" />
       </Backdrop>
@@ -176,4 +202,4 @@ const Main = ({state, manageState, stakeTokens, unstakeTokens}) => {
   );
 }
 
-export default Main;
+export default Borrow;
