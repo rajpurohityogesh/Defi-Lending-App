@@ -84,7 +84,7 @@ const Lending = ({state, manageState, stakeTokens, unstakeTokens}) => {
                           Balance: {parseFloat(window.web3.utils.fromWei(
                             state.mTokensBalance[state.selectedToken] 
                             ? state.mTokensBalance[state.selectedToken]
-                            : "0", 'Ether')).toString(2)}
+                            : "0", 'Ether')).toFixed(2)}
                       </span>
                   </div>
                   <div className="input-group mb-4">
